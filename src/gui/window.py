@@ -1,17 +1,18 @@
-"""Main window for Minecraft Server Manager GUI."""
+"""Main window for EasyMC - Minecraft Server Manager."""
 
 from typing import Optional
-import threading
 import webbrowser
+import os
+from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QTabWidget, QListWidget, QListWidgetItem, QPushButton,
+    QStackedWidget, QListWidget, QListWidgetItem, QPushButton,
     QLabel, QComboBox, QSpinBox, QGroupBox, QMessageBox,
-    QProgressDialog, QFileDialog, QTextEdit
+    QCheckBox, QScrollArea
 )
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFont, QColor, QPalette
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 
 from .types import ServerInfo
 from .detector import JavaServerDetector
@@ -20,31 +21,33 @@ from .cli import generate_launch_script, generate_windows_script, save_script
 
 
 SERVER_TYPES = {
-    "Paper": "https://papermc.io/downloads",
-    "Purpur": "https://purpurmc.org/downloads",
-    "Fabric": "https://fabricmc.net/use/installer",
-    "Spigot": "https://getbukkit.org/downloads/spigot",
-    "Folia": "https://papermc.io/downloads?version=folia",
-    "Mohist": "https://mohistmc.org/downloads",
+    "Java": {
+        "Paper": "https://papermc.io/downloads",
+        "Purpur": "https://purpurmc.org/downloads", 
+        "Fabric": "https://fabricmc.net/use/installer",
+        "Spigot": "https://getbukkit.org/downloads/spigot",
+    },
+    "Bedrock": {
+        "LiteLoader": "https://liteloader.com",
+        "Nukkit": "https://nukkitx.com/downloads",
+        "PocketMine": "https://pmmp.io/downloads",
+    }
 }
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.servers = []
-        self.selected_server: Optional[ServerInfo] = None
         self.server_properties = ServerProperties()
         self.java_detector = JavaServerDetector()
         self.dark_mode = True
         
         self.init_ui()
         self.load_servers()
-        self.apply_dark_mode()
 
     def init_ui(self):
         self.setWindowTitle("EasyMC")
-        self.setGeometry(100, 100, 800, 650)
+        self.setGeometry(100, 100, 900, 700)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -53,166 +56,167 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(20, 20, 20, 20)
 
         title = QLabel("EasyMC - Minecraft Server Manager")
-        title.setFont(QFont("Arial", 20, QFont.Weight.Bold))
+        title.setFont(QFont("Arial", 22, QFont.Weight.Bold))
         main_layout.addWidget(title)
 
-        self.tabs = QTabWidget()
-        self.tabs.currentChanged.connect(self.on_tab_changed)
+        self.stack = QStackedWidget()
         
-        self.servers_tab = self.create_servers_tab()
-        self.settings_tab = self.create_settings_tab()
+        self.home_page = self.create_home_page()
+        self.manage_page = self.create_manage_page()
+        self.create_page = self.create_create_page()
         
-        self.tabs.addTab(self.servers_tab, "Servers")
-        self.tabs.addTab(self.settings_tab, "Settings")
+        self.stack.addWidget(self.home_page)
+        self.stack.addWidget(self.manage_page)
+        self.stack.addWidget(self.create_page)
         
-        main_layout.addWidget(self.tabs)
+        main_layout.addWidget(self.stack)
+        
+        self.apply_dark_mode()
 
-    def create_servers_tab(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+    def create_home_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setSpacing(20)
 
-        install_layout = QHBoxLayout()
-        install_layout.addWidget(QLabel("Server:"))
-        
-        self.server_combo = QComboBox()
-        self.server_combo.addItems(list(SERVER_TYPES.keys()))
-        install_layout.addWidget(self.server_combo)
-        
-        self.download_btn = QPushButton("Download")
-        self.download_btn.clicked.connect(self.download_server)
-        install_layout.addWidget(self.download_btn)
-        
-        install_layout.addStretch()
-        layout.addLayout(install_layout)
+        layout.addStretch()
 
+        btn = QPushButton("Manage Server")
+        btn.setFont(QFont("Arial", 16))
+        btn.setMinimumHeight(60)
+        btn.clicked.connect(lambda: self.stack.setCurrentIndex(1))
+        layout.addWidget(btn)
+
+        btn2 = QPushButton("Create Server")
+        btn2.setFont(QFont("Arial", 16))
+        btn2.setMinimumHeight(60)
+        btn2.clicked.connect(lambda: self.stack.setCurrentIndex(2))
+        layout.addWidget(btn2)
+
+        layout.addStretch()
+
+        return page
+
+    def create_manage_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+
+        nav = QHBoxLayout()
+        nav.addWidget(QPushButton("← Back").clicked.connect(lambda: self.stack.setCurrentIndex(0)))
+        nav.addStretch()
+        layout.addLayout(nav)
+
+        layout.addWidget(QLabel("Your Servers"))
+        
         self.server_list = QListWidget()
         self.server_list.itemClicked.connect(self.on_server_selected)
         layout.addWidget(self.server_list)
 
-        action_layout = QHBoxLayout()
-        self.export_btn = QPushButton("Export Script")
-        self.export_btn.clicked.connect(self.export_script)
-        self.export_btn.setEnabled(False)
-        action_layout.addWidget(self.export_btn)
+        actions = QHBoxLayout()
+        self.edit_props_btn = QPushButton("Edit server.properties")
+        self.edit_props_btn.setEnabled(False)
+        self.edit_props_btn.clicked.connect(self.edit_properties)
+        actions.addWidget(self.edit_props_btn)
         
-        self.refresh_btn = QPushButton("Refresh")
-        self.refresh_btn.clicked.connect(self.load_servers)
-        action_layout.addWidget(self.refresh_btn)
+        self.install_plugins_btn = QPushButton("Install Plugins")
+        self.install_plugins_btn.setEnabled(False)
+        self.install_plugins_btn.clicked.connect(self.install_plugins)
+        actions.addWidget(self.install_plugins_btn)
         
-        action_layout.addStretch()
-        layout.addLayout(action_layout)
+        actions.addStretch()
+        layout.addLayout(actions)
 
-        return widget
+        return page
 
-    def create_settings_tab(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+    def create_create_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
 
-        theme_layout = QHBoxLayout()
-        theme_layout.addWidget(QLabel("Theme:"))
+        nav = QHBoxLayout()
+        nav.addWidget(QPushButton("← Back").clicked.connect(lambda: self.stack.setCurrentIndex(0)))
+        nav.addStretch()
+        layout.addLayout(nav)
+
+        layout.addWidget(QLabel("Select Server Type"))
+
+        type_layout = QHBoxLayout()
         
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["Dark", "Light"])
-        self.theme_combo.currentTextChanged.connect(self.toggle_theme)
-        theme_layout.addWidget(self.theme_combo)
+        self.java_btn = QPushButton("Java Server")
+        self.java_btn.setMinimumHeight(50)
+        self.java_btn.clicked.connect(lambda: self.show_java_options())
+        type_layout.addWidget(self.java_btn)
         
-        theme_layout.addStretch()
-        layout.addLayout(theme_layout)
+        self.bedrock_btn = QPushButton("Bedrock Server")
+        self.bedrock_btn.setMinimumHeight(50)
+        self.bedrock_btn.clicked.connect(lambda: self.show_bedrock_options())
+        type_layout.addWidget(self.bedrock_btn)
+        
+        type_layout.addStretch()
+        layout.addLayout(type_layout)
 
-        props_group = QGroupBox("Server Properties")
-        props_layout = QVBoxLayout(props_group)
+        self.java_group = QGroupBox("Java Server Options")
+        java_layout = QVBoxLayout(self.java_group)
+        
+        self.java_combo = QComboBox()
+        self.java_combo.addItems(list(SERVER_TYPES["Java"].keys()))
+        java_layout.addWidget(QLabel("Server:"))
+        java_layout.addWidget(self.java_combo)
+        
+        java_layout.addWidget(QLabel("Version:"))
+        self.version_combo = QComboBox()
+        self.version_combo.addItems(["1.21", "1.20.4", "1.20.2", "1.19.4", "1.18.2"])
+        java_layout.addWidget(self.version_combo)
+        
+        java_btn = QPushButton("Download")
+        java_btn.clicked.connect(self.download_java)
+        java_layout.addWidget(java_btn)
+        
+        self.java_group.hide()
+        layout.addWidget(self.java_group)
 
-        port_layout = QHBoxLayout()
-        port_layout.addWidget(QLabel("Server Port:"))
-        self.port_spin = QSpinBox()
-        self.port_spin.setRange(1, 65535)
-        self.port_spin.setValue(25565)
-        self.port_spin.valueChanged.connect(self.on_port_changed)
-        port_layout.addWidget(self.port_spin)
-        port_layout.addStretch()
-        props_layout.addLayout(port_layout)
+        self.bedrock_group = QGroupBox("Bedrock Server Options")
+        bedrock_layout = QVBoxLayout(self.bedrock_group)
+        
+        self.bedrock_combo = QComboBox()
+        self.bedrock_combo.addItems(list(SERVER_TYPES["Bedrock"].keys()))
+        bedrock_layout.addWidget(QLabel("Server:"))
+        bedrock_layout.addWidget(self.bedrock_combo)
+        
+        bedrock_btn = QPushButton("Download")
+        bedrock_btn.clicked.connect(self.download_bedrock)
+        bedrock_layout.addWidget(bedrock_btn)
+        
+        self.bedrock_group.hide()
+        layout.addWidget(self.bedrock_group)
 
-        players_layout = QHBoxLayout()
-        players_layout.addWidget(QLabel("Max Players:"))
-        self.max_players_spin = QSpinBox()
-        self.max_players_spin.setRange(1, 1000)
-        self.max_players_spin.setValue(20)
-        self.max_players_spin.valueChanged.connect(self.on_max_players_changed)
-        players_layout.addWidget(self.max_players_spin)
-        players_layout.addStretch()
-        props_layout.addLayout(players_layout)
+        eula_layout = QHBoxLayout()
+        self.eula_check = QCheckBox("I accept Minecraft EULA")
+        eula_layout.addWidget(self.eula_check)
+        eula_layout.addStretch()
+        layout.addLayout(eula_layout)
 
-        gamemode_layout = QHBoxLayout()
-        gamemode_layout.addWidget(QLabel("Gamemode:"))
-        self.gamemode_combo = QComboBox()
-        self.gamemode_combo.addItems(["survival", "creative", "adventure", "spectator"])
-        self.gamemode_combo.currentTextChanged.connect(self.on_gamemode_changed)
-        gamemode_layout.addWidget(self.gamemode_combo)
-        gamemode_layout.addStretch()
-        props_layout.addLayout(gamemode_layout)
-
-        difficulty_layout = QHBoxLayout()
-        difficulty_layout.addWidget(QLabel("Difficulty:"))
-        self.difficulty_combo = QComboBox()
-        self.difficulty_combo.addItems(["peaceful", "easy", "normal", "hard"])
-        self.difficulty_combo.currentTextChanged.connect(self.on_difficulty_changed)
-        difficulty_layout.addWidget(self.difficulty_combo)
-        difficulty_layout.addStretch()
-        props_layout.addLayout(difficulty_layout)
-
-        layout.addWidget(props_group)
         layout.addStretch()
 
-        self.load_properties()
-        return widget
+        return page
 
-    def load_properties(self):
-        self.port_spin.setValue(self.server_properties.get_port())
-        self.max_players_spin.setValue(self.server_properties.get_max_players())
-        self.gamemode_combo.setCurrentText(self.server_properties.get_gamemode())
-        self.difficulty_combo.setCurrentText(self.server_properties.get_difficulty())
+    def show_java_options(self):
+        self.java_group.show()
+        self.bedrock_group.hide()
 
-    def apply_dark_mode(self):
-        if self.dark_mode:
-            self.setStyleSheet("""
-                QMainWindow { background-color: #1e1e1e; color: #ffffff; }
-                QWidget { background-color: #1e1e1e; color: #ffffff; }
-                QLabel { color: #ffffff; }
-                QPushButton { background-color: #3a3a3a; color: #ffffff; border: 1px solid #555; padding: 8px 16px; border-radius: 4px; }
-                QPushButton:hover { background-color: #4a4a4a; }
-                QPushButton:pressed { background-color: #2a2a2a; }
-                QListWidget { background-color: #252525; color: #ffffff; border: 1px solid #444; }
-                QListWidget::item:selected { background-color: #0078d7; }
-                QComboBox { background-color: #3a3a3a; color: #ffffff; border: 1px solid #555; padding: 4px; }
-                QSpinBox { background-color: #3a3a3a; color: #ffffff; border: 1px solid #555; }
-                QTabWidget::pane { border: 1px solid #444; }
-                QTabBar::tab { background-color: #2a2a2a; color: #fff; padding: 8px 16px; }
-                QTabBar::tab:selected { background-color: #0078d7; }
-                QGroupBox { color: #fff; border: 1px solid #444; margin-top: 8px; padding-top: 8px; }
-                QProgressDialog { background-color: #1e1e1e; }
-            """)
-        else:
-            self.setStyleSheet("")
+    def show_bedrock_options(self):
+        self.java_group.hide()
+        self.bedrock_group.show()
 
-    def toggle_theme(self, theme):
-        self.dark_mode = (theme == "Dark")
-        self.apply_dark_mode()
+    def download_java(self):
+        server = self.java_combo.currentText()
+        url = SERVER_TYPES["Java"].get(server)
+        if url:
+            webbrowser.open(url)
 
-    def on_port_changed(self, value):
-        self.server_properties.set_port(value)
-
-    def on_max_players_changed(self, value):
-        self.server_properties.set_max_players(value)
-
-    def on_gamemode_changed(self, text):
-        self.server_properties.set_gamemode(text)
-
-    def on_difficulty_changed(self, text):
-        self.server_properties.set_difficulty(text)
-
-    def on_tab_changed(self, index):
-        if index == 0:
-            self.load_servers()
+    def download_bedrock(self):
+        server = self.bedrock_combo.currentText()
+        url = SERVER_TYPES["Bedrock"].get(server)
+        if url:
+            webbrowser.open(url)
 
     def load_servers(self):
         self.server_list.clear()
@@ -228,40 +232,34 @@ class MainWindow(QMainWindow):
                 ))
                 self.server_list.addItem(item)
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to load servers: {e}")
+            pass
 
     def on_server_selected(self, item):
-        self.selected_server = item.data(Qt.ItemDataRole.UserRole)
-        self.export_btn.setEnabled(bool(self.selected_server))
+        self.edit_props_btn.setEnabled(True)
+        self.install_plugins_btn.setEnabled(True)
 
-    def download_server(self):
-        server_type = self.server_combo.currentText()
-        url = SERVER_TYPES.get(server_type)
-        if url:
-            webbrowser.open(url)
+    def edit_properties(self):
+        QMessageBox.information(self, "Edit Properties", "Properties editor coming soon!")
 
-    def export_script(self):
-        if not self.selected_server:
-            QMessageBox.warning(self, "Error", "No server selected")
-            return
+    def install_plugins(self):
+        QMessageBox.information(self, "Install Plugins", "Plugin installer coming soon!")
 
-        server = {
-            "name": self.selected_server.name,
-            "jar_path": self.selected_server.jar_path or f"./{self.selected_server.name}.jar"
-        }
-
-        import sys
-        if sys.platform == "win32":
-            script = generate_windows_script(server)
-            filepath, _ = QFileDialog.getSaveFileName(
-                self, "Save Script", f"{self.selected_server.name}.bat", "Batch Files (*.bat)"
-            )
+    def apply_dark_mode(self):
+        if self.dark_mode:
+            self.setStyleSheet("""
+                QMainWindow { background-color: #1e1e1e; color: #ffffff; }
+                QWidget { background-color: #1e1e1e; color: #ffffff; }
+                QLabel { color: #ffffff; }
+                QPushButton { background-color: #3a3a3a; color: #ffffff; border: 1px solid #555; padding: 10px 20px; border-radius: 6px; font-size: 14px; }
+                QPushButton:hover { background-color: #505050; }
+                QPushButton:pressed { background-color: #2a2a2a; }
+                QListWidget { background-color: #252525; color: #ffffff; border: 1px solid #444; }
+                QListWidget::item:selected { background-color: #0078d7; }
+                QComboBox { background-color: #3a3a3a; color: #ffffff; border: 1px solid #555; padding: 6px; }
+                QSpinBox { background-color: #3a3a3a; color: #ffffff; border: 1px solid #555; }
+                QCheckBox { color: #ffffff; }
+                QGroupBox { color: #ffffff; border: 1px solid #444; margin-top: 10px; padding-top: 10px; }
+                QStackedWidget { border: 1px solid #444; }
+            """)
         else:
-            script = generate_launch_script(server)
-            filepath, _ = QFileDialog.getSaveFileName(
-                self, "Save Script", f"{self.selected_server.name}.sh", "Shell Scripts (*.sh)"
-            )
-
-        if filepath:
-            save_script(script, filepath)
-            QMessageBox.information(self, "Success", f"Saved to {filepath}")
+            self.setStyleSheet("")
