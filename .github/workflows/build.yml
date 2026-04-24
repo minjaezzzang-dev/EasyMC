@@ -23,7 +23,9 @@ jobs:
         run: pip install -r requirements.txt nuitka
 
       - name: Build
-        run: python -m nuitka --standalone --onefile --windows-console=yep --include-data-dir=src;src --output-dir=dist main.py
+        shell: bash
+        run: |
+          python -m nuitka --standalone --onefile --windows-console=yep "--include-data-dir=src;src" --output-dir=dist main.py
 
       - name: Rename
         run: ren dist\main.exe MinecraftServerManager-windows.exe
