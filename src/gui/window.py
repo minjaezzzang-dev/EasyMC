@@ -101,7 +101,9 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(page)
 
         nav = QHBoxLayout()
-        nav.addWidget(QPushButton("← Back").clicked.connect(lambda: self.stack.setCurrentIndex(0)))
+        back_btn = QPushButton("← Back")
+        back_btn.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        nav.addWidget(back_btn)
         nav.addStretch()
         layout.addLayout(nav)
 
@@ -132,7 +134,9 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(page)
 
         nav = QHBoxLayout()
-        nav.addWidget(QPushButton("← Back").clicked.connect(lambda: self.stack.setCurrentIndex(0)))
+        back_btn = QPushButton("← Back")
+        back_btn.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        nav.addWidget(back_btn)
         nav.addStretch()
         layout.addLayout(nav)
 
