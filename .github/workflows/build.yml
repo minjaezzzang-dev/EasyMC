@@ -25,12 +25,12 @@ jobs:
       - name: Build
         run: |
           python -m nuitka --standalone --onefile --output-dir=dist main.py
+          cp -r src dist/
 
-      - name: Copy src
-        run: cp -r src dist/
-
-      - name: Rename
-        run: mv dist/main.exe MinecraftServerManager-windows.exe
+      - name: Find exe
+        run: |
+          ls dist/
+          mv dist/*.exe MinecraftServerManager-windows.exe 2>/dev/null || mv dist/main MinecraftServerManager-windows.exe 2>/dev/null || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -57,8 +57,10 @@ jobs:
           python -m nuitka --standalone --onefile --output-dir=dist main.py
           cp -r src dist/
 
-      - name: Rename
-        run: mv dist/main MinecraftServerManager-macos
+      - name: Find binary
+        run: |
+          ls dist/
+          mv dist/* MinecraftServerManager-macos 2>/dev/null || mv dist/main MinecraftServerManager-macos 2>/dev/null || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -85,8 +87,10 @@ jobs:
           python -m nuitka --standalone --onefile --output-dir=dist main.py
           cp -r src dist/
 
-      - name: Rename
-        run: mv dist/main MinecraftServerManager-linux
+      - name: Find binary
+        run: |
+          ls dist/
+          mv dist/* MinecraftServerManager-linux 2>/dev/null || mv dist/main MinecraftServerManager-linux 2>/dev/null || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
