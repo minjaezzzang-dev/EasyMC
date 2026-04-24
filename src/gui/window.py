@@ -1,86 +1,86 @@
 """Main window for Minecraft Server Manager GUI."""
 
 from typing import Optional
+import threading
+import webbrowser
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QTabWidget, QListWidget, QListWidgetItem, QPushButton, QLineEdit,
+    QTabWidget, QListWidget, QListWidgetItem, QPushButton,
     QLabel, QComboBox, QSpinBox, QGroupBox, QMessageBox,
-    QProgressDialog, QFileDialog
+    QProgressDialog, QFileDialog, QTextEdit
 )
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QFont, QColor, QPalette
 
 from .types import ServerInfo
-from .worker import WorkerThread
-from .modrinth import ModrinthClient, SERVER_PROJECT_IDS
 from .detector import JavaServerDetector
 from .properties import ServerProperties
 from .cli import generate_launch_script, generate_windows_script, save_script
+
+
+SERVER_TYPES = {
+    "Paper": "https://papermc.io/downloads",
+    "Purpur": "https://purpurmc.org/downloads",
+    "Fabric": "https://fabricmc.net/use/installer",
+    "Spigot": "https://getbukkit.org/downloads/spigot",
+    "Folia": "https://papermc.io/downloads?version=folia",
+    "Mohist": "https://mohistmc.org/downloads",
+}
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.servers = []
-        self.search_results = []
         self.selected_server: Optional[ServerInfo] = None
-        self.modrinth_client = ModrinthClient()
         self.server_properties = ServerProperties()
         self.java_detector = JavaServerDetector()
-        self.current_tab = "java"
+        self.dark_mode = True
         
         self.init_ui()
         self.load_servers()
+        self.apply_dark_mode()
 
     def init_ui(self):
-        self.setWindowTitle("Minecraft Server Manager")
-        self.setGeometry(100, 100, 900, 600)
+        self.setWindowTitle("EasyMC")
+        self.setGeometry(100, 100, 800, 650)
 
         central = QWidget()
         self.setCentralWidget(central)
         
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(16, 16, 16, 16)
+        main_layout.setContentsMargins(20, 20, 20, 20)
 
-        title = QLabel("Minecraft Server Manager")
-        title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        title = QLabel("EasyMC - Minecraft Server Manager")
+        title.setFont(QFont("Arial", 20, QFont.Weight.Bold))
         main_layout.addWidget(title)
 
         self.tabs = QTabWidget()
         self.tabs.currentChanged.connect(self.on_tab_changed)
         
-        self.java_tab = self.create_server_tab()
-        self.search_tab = self.create_search_tab()
+        self.servers_tab = self.create_servers_tab()
+        self.settings_tab = self.create_settings_tab()
         
-        self.tabs.addTab(self.java_tab, "Java Servers")
-        self.tabs.addTab(self.search_tab, "Search")
+        self.tabs.addTab(self.servers_tab, "Servers")
+        self.tabs.addTab(self.settings_tab, "Settings")
         
         main_layout.addWidget(self.tabs)
 
-        props_group = self.create_properties_group()
-        main_layout.addWidget(props_group)
-
-    def create_server_tab(self) -> QWidget:
+    def create_servers_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
         install_layout = QHBoxLayout()
-        install_layout.addWidget(QLabel("Server Type:"))
+        install_layout.addWidget(QLabel("Server:"))
         
-        self.server_type_combo = QComboBox()
-        self.server_type_combo.addItems(["paper", "purpur", "fabric", "spigot", "folia", "mohist"])
-        install_layout.addWidget(self.server_type_combo)
+        self.server_combo = QComboBox()
+        self.server_combo.addItems(list(SERVER_TYPES.keys()))
+        install_layout.addWidget(self.server_combo)
         
-        install_layout.addWidget(QLabel("Version:"))
-        self.version_input = QLineEdit()
-        self.version_input.setPlaceholderText("e.g., 1.20.4")
-        self.version_input.setFixedWidth(100)
-        install_layout.addWidget(self.version_input)
-        
-        self.install_btn = QPushButton("Install")
-        self.install_btn.clicked.connect(self.install_server)
-        install_layout.addWidget(self.install_btn)
+        self.download_btn = QPushButton("Download")
+        self.download_btn.clicked.connect(self.download_server)
+        install_layout.addWidget(self.download_btn)
         
         install_layout.addStretch()
         layout.addLayout(install_layout)
@@ -89,87 +89,114 @@ class MainWindow(QMainWindow):
         self.server_list.itemClicked.connect(self.on_server_selected)
         layout.addWidget(self.server_list)
 
-        export_layout = QHBoxLayout()
-        self.export_btn = QPushButton("Export Start Script")
+        action_layout = QHBoxLayout()
+        self.export_btn = QPushButton("Export Script")
         self.export_btn.clicked.connect(self.export_script)
         self.export_btn.setEnabled(False)
-        export_layout.addWidget(self.export_btn)
-        export_layout.addStretch()
-        layout.addLayout(export_layout)
+        action_layout.addWidget(self.export_btn)
+        
+        self.refresh_btn = QPushButton("Refresh")
+        self.refresh_btn.clicked.connect(self.load_servers)
+        action_layout.addWidget(self.refresh_btn)
+        
+        action_layout.addStretch()
+        layout.addLayout(action_layout)
 
         return widget
 
-    def create_search_tab(self) -> QWidget:
+    def create_settings_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        search_layout = QHBoxLayout()
-        search_layout.addWidget(QLabel("Search:"))
+        theme_layout = QHBoxLayout()
+        theme_layout.addWidget(QLabel("Theme:"))
         
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search Modrinth...")
-        self.search_input.returnPressed.connect(self.do_search)
-        search_layout.addWidget(self.search_input)
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(["Dark", "Light"])
+        self.theme_combo.currentTextChanged.connect(self.toggle_theme)
+        theme_layout.addWidget(self.theme_combo)
         
-        self.search_btn = QPushButton("Search")
-        self.search_btn.clicked.connect(self.do_search)
-        search_layout.addWidget(self.search_btn)
-        
-        search_layout.addStretch()
-        layout.addLayout(search_layout)
+        theme_layout.addStretch()
+        layout.addLayout(theme_layout)
 
-        self.search_results_list = QListWidget()
-        self.search_results_list.itemClicked.connect(self.on_search_result_selected)
-        layout.addWidget(self.search_results_list)
+        props_group = QGroupBox("Server Properties")
+        props_layout = QVBoxLayout(props_group)
 
-        return widget
-
-    def create_properties_group(self) -> QGroupBox:
-        group = QGroupBox("Server Properties")
-        layout = QHBoxLayout(group)
-
-        layout.addWidget(QLabel("Port:"))
+        port_layout = QHBoxLayout()
+        port_layout.addWidget(QLabel("Server Port:"))
         self.port_spin = QSpinBox()
         self.port_spin.setRange(1, 65535)
         self.port_spin.setValue(25565)
         self.port_spin.valueChanged.connect(self.on_port_changed)
-        layout.addWidget(self.port_spin)
+        port_layout.addWidget(self.port_spin)
+        port_layout.addStretch()
+        props_layout.addLayout(port_layout)
 
-        layout.addWidget(QLabel("Max Players:"))
+        players_layout = QHBoxLayout()
+        players_layout.addWidget(QLabel("Max Players:"))
         self.max_players_spin = QSpinBox()
         self.max_players_spin.setRange(1, 1000)
         self.max_players_spin.setValue(20)
         self.max_players_spin.valueChanged.connect(self.on_max_players_changed)
-        layout.addWidget(self.max_players_spin)
+        players_layout.addWidget(self.max_players_spin)
+        players_layout.addStretch()
+        props_layout.addLayout(players_layout)
 
-        layout.addWidget(QLabel("Gamemode:"))
+        gamemode_layout = QHBoxLayout()
+        gamemode_layout.addWidget(QLabel("Gamemode:"))
         self.gamemode_combo = QComboBox()
         self.gamemode_combo.addItems(["survival", "creative", "adventure", "spectator"])
         self.gamemode_combo.currentTextChanged.connect(self.on_gamemode_changed)
-        layout.addWidget(self.gamemode_combo)
+        gamemode_layout.addWidget(self.gamemode_combo)
+        gamemode_layout.addStretch()
+        props_layout.addLayout(gamemode_layout)
 
-        layout.addWidget(QLabel("Difficulty:"))
+        difficulty_layout = QHBoxLayout()
+        difficulty_layout.addWidget(QLabel("Difficulty:"))
         self.difficulty_combo = QComboBox()
         self.difficulty_combo.addItems(["peaceful", "easy", "normal", "hard"])
         self.difficulty_combo.currentTextChanged.connect(self.on_difficulty_changed)
-        layout.addWidget(self.difficulty_combo)
+        difficulty_layout.addWidget(self.difficulty_combo)
+        difficulty_layout.addStretch()
+        props_layout.addLayout(difficulty_layout)
 
-        layout.addWidget(QLabel("MOTD:"))
-        self.motd_input = QLineEdit()
-        self.motd_input.setPlaceholderText("A Minecraft Server")
-        self.motd_input.textChanged.connect(self.on_motd_changed)
-        layout.addWidget(self.motd_input)
-
+        layout.addWidget(props_group)
         layout.addStretch()
+
         self.load_properties()
-        return group
+        return widget
 
     def load_properties(self):
         self.port_spin.setValue(self.server_properties.get_port())
         self.max_players_spin.setValue(self.server_properties.get_max_players())
         self.gamemode_combo.setCurrentText(self.server_properties.get_gamemode())
         self.difficulty_combo.setCurrentText(self.server_properties.get_difficulty())
-        self.motd_input.setText(self.server_properties.get_motd())
+
+    def apply_dark_mode(self):
+        if self.dark_mode:
+            self.setStyleSheet("""
+                QMainWindow { background-color: #1e1e1e; color: #ffffff; }
+                QWidget { background-color: #1e1e1e; color: #ffffff; }
+                QLabel { color: #ffffff; }
+                QPushButton { background-color: #3a3a3a; color: #ffffff; border: 1px solid #555; padding: 8px 16px; border-radius: 4px; }
+                QPushButton:hover { background-color: #4a4a4a; }
+                QPushButton:pressed { background-color: #2a2a2a; }
+                QListWidget { background-color: #252525; color: #ffffff; border: 1px solid #444; }
+                QListWidget::item:selected { background-color: #0078d7; }
+                QComboBox { background-color: #3a3a3a; color: #ffffff; border: 1px solid #555; padding: 4px; }
+                QSpinBox { background-color: #3a3a3a; color: #ffffff; border: 1px solid #555; }
+                QTabWidget::pane { border: 1px solid #444; }
+                QTabBar::tab { background-color: #2a2a2a; color: #fff; padding: 8px 16px; }
+                QTabBar::tab:selected { background-color: #0078d7; }
+                QGroupBox { color: #fff; border: 1px solid #444; margin-top: 8px; padding-top: 8px; }
+                QProgressDialog { background-color: #1e1e1e; }
+            """)
+        else:
+            self.setStyleSheet("")
+
+    def toggle_theme(self, theme):
+        self.dark_mode = (theme == "Dark")
+        self.apply_dark_mode()
 
     def on_port_changed(self, value):
         self.server_properties.set_port(value)
@@ -183,22 +210,16 @@ class MainWindow(QMainWindow):
     def on_difficulty_changed(self, text):
         self.server_properties.set_difficulty(text)
 
-    def on_motd_changed(self, text):
-        self.server_properties.set_motd(text)
-
     def on_tab_changed(self, index):
         if index == 0:
-            self.current_tab = "java"
             self.load_servers()
-        elif index == 1:
-            self.current_tab = "search"
 
     def load_servers(self):
         self.server_list.clear()
         try:
             servers = self.java_detector.discover_servers()
             for s in servers:
-                item = QListWidgetItem(f"{s['name']} ({s['version']}) - {s['server_type']}")
+                item = QListWidgetItem(f"{s['name']} ({s['version']})")
                 item.setData(Qt.ItemDataRole.UserRole, ServerInfo(
                     name=s['name'],
                     version=s['version'],
@@ -213,73 +234,11 @@ class MainWindow(QMainWindow):
         self.selected_server = item.data(Qt.ItemDataRole.UserRole)
         self.export_btn.setEnabled(bool(self.selected_server))
 
-    def on_search_result_selected(self, item):
-        data = item.data(Qt.ItemDataRole.UserRole)
-        self.selected_server = ServerInfo(
-            name=data.get('title', data.get('slug', 'unknown')),
-            version=data.get('latest_version', ''),
-            server_type='java'
-        )
-
-    def install_server(self):
-        server_type = self.server_type_combo.currentText()
-        version = self.version_input.text() or None
-
-        progress = QProgressDialog("Installing server...", "Cancel", 0, 0, self)
-        progress.setWindowTitle("Installing")
-        progress.setModal(True)
-        progress.show()
-
-        def do_install():
-            project_id = SERVER_PROJECT_IDS.get(server_type)
-            if not project_id:
-                raise ValueError(f"Unknown server type: {server_type}")
-            return self.modrinth_client.download_version(project_id, "servers", version)
-
-        self.worker = WorkerThread(do_install)
-        self.worker.finished.connect(lambda r: self.on_install_finished(progress, r))
-        self.worker.error.connect(lambda e: self.on_install_error(progress, e))
-        self.worker.start()
-
-    def on_install_finished(self, progress, file_path):
-        progress.close()
-        if file_path:
-            QMessageBox.information(self, "Success", f"Installed to {file_path}")
-            self.load_servers()
-        else:
-            QMessageBox.warning(self, "Error", "Failed to download")
-
-    def on_install_error(self, progress, error):
-        progress.close()
-        QMessageBox.warning(self, "Error", error)
-
-    def do_search(self):
-        query = self.search_input.text().strip()
-        if not query:
-            return
-
-        self.search_btn.setEnabled(False)
-        
-        def do_search_api():
-            return self.modrinth_client.search_versions(query)
-
-        self.worker = WorkerThread(do_search_api)
-        self.worker.finished.connect(self.on_search_finished)
-        self.worker.error.connect(self.on_search_error)
-        self.worker.start()
-
-    def on_search_finished(self, results):
-        self.search_btn.setEnabled(True)
-        self.search_results_list.clear()
-        
-        for r in results:
-            item = QListWidgetItem(f"{r.get('title', 'unknown')} - {r.get('latest_version', '')}")
-            item.setData(Qt.ItemDataRole.UserRole, r)
-            self.search_results_list.addItem(item)
-
-    def on_search_error(self, error):
-        self.search_btn.setEnabled(True)
-        QMessageBox.warning(self, "Error", error)
+    def download_server(self):
+        server_type = self.server_combo.currentText()
+        url = SERVER_TYPES.get(server_type)
+        if url:
+            webbrowser.open(url)
 
     def export_script(self):
         if not self.selected_server:
