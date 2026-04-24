@@ -1,7 +1,6 @@
 """Main window for EasyMC - Minecraft Server Manager."""
 
 from typing import Optional
-import webbrowser
 import os
 from pathlib import Path
 
@@ -15,22 +14,24 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
 from .types import ServerInfo
+from .worker import WorkerThread
 from .detector import JavaServerDetector
 from .properties import ServerProperties
 from .cli import generate_launch_script, generate_windows_script, save_script
+from .modrinth import ModrinthClient, SERVER_PROJECT_IDS
 
 
 SERVER_TYPES = {
     "Java": {
-        "Paper": "https://papermc.io/downloads",
-        "Purpur": "https://purpurmc.org/downloads", 
-        "Fabric": "https://fabricmc.net/use/installer",
-        "Spigot": "https://getbukkit.org/downloads/spigot",
+        "Paper": "PapMC",
+        "Purpur": "Purpur", 
+        "Fabric": "fabric",
+        "Spigot": "Spigot",
     },
     "Bedrock": {
-        "LiteLoader": "https://liteloader.com",
-        "Nukkit": "https://nukkitx.com/downloads",
-        "PocketMine": "https://pmmp.io/downloads",
+        "LiteLoader": "liteloader",
+        "Nukkit": "nukkit",
+        "PocketMine": "pmmp",
     }
 }
 
@@ -40,7 +41,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.server_properties = ServerProperties()
         self.java_detector = JavaServerDetector()
+        self.modrinth = ModrinthClient()
         self.dark_mode = True
+        self.current_server_type = "Java"
         
         self.init_ui()
         self.load_servers()
@@ -212,15 +215,38 @@ class MainWindow(QMainWindow):
 
     def download_java(self):
         server = self.java_combo.currentText()
-        url = SERVER_TYPES["Java"].get(server)
-        if url:
-            webbrowser.open(url)
+        version = self.version_combo.currentText()
+        project_id = SERVER_PROJECT_IDS.get(server)
+        
+        progress = QMessageBox(self)
+        progress.setWindowTitle("Downloading")
+        progress.setText(f"Downloading {server} {version}...")
+        progress.setStandardButtons(QMessageBox.StandardButton.NoButton)
+        progress.show()
+        
+        def do_download():
+            return self.modrinth.download_version(project_id, "servers", version)
+        
+        self.worker = WorkerThread(do_download)
+        self.worker.finished.connect(lambda r: self.on_download_finished(r, progress))
+        self.worker.error.connect(lambda e: self.on_download_error(e, progress))
+        self.worker.start()
+
+    def on_download_finished(self, file_path, progress):
+        progress.close()
+        if file_path:
+            QMessageBox.information(self, "Success", f"Downloaded to {file_path}")
+            self.load_servers()
+        else:
+            QMessageBox.warning(self, "Error", "Download failed")
+
+    def on_download_error(self, error, progress):
+        progress.close()
+        QMessageBox.warning(self, "Error", str(error))
 
     def download_bedrock(self):
         server = self.bedrock_combo.currentText()
-        url = SERVER_TYPES["Bedrock"].get(server)
-        if url:
-            webbrowser.open(url)
+        QMessageBox.information(self, "Coming Soon", f"Bedrock server download for {server} will be available soon.")
 
     def load_servers(self):
         self.server_list.clear()
