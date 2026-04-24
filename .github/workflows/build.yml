@@ -27,16 +27,16 @@ jobs:
           python -m nuitka --standalone --onefile --output-dir=dist main.py
           cp -r src dist/
 
-      - name: Find exe
+      - name: List and rename
         run: |
-          ls dist/
-          mv dist/*.exe MinecraftServerManager-windows.exe 2>/dev/null || mv dist/main MinecraftServerManager-windows.exe 2>/dev/null || true
+          ls -la dist/
+          cd dist && for f in main*; do mv "$f" ../MinecraftServerManager-windows.exe 2>/dev/null && break; done
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: MinecraftServerManager-windows
-          path: dist/MinecraftServerManager-windows.exe
+          path: MinecraftServerManager-windows.exe
 
   build-macos:
     runs-on: macos-latest
@@ -57,16 +57,16 @@ jobs:
           python -m nuitka --standalone --onefile --output-dir=dist main.py
           cp -r src dist/
 
-      - name: Find binary
+      - name: List and rename
         run: |
-          ls dist/
-          mv dist/* MinecraftServerManager-macos 2>/dev/null || mv dist/main MinecraftServerManager-macos 2>/dev/null || true
+          ls -la dist/
+          cd dist && for f in main*; do mv "$f" ../MinecraftServerManager-macos 2>/dev/null && break; done
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: MinecraftServerManager-macos
-          path: dist/MinecraftServerManager-macos
+          path: MinecraftServerManager-macos
 
   build-linux:
     runs-on: ubuntu-latest
@@ -87,16 +87,16 @@ jobs:
           python -m nuitka --standalone --onefile --output-dir=dist main.py
           cp -r src dist/
 
-      - name: Find binary
+      - name: List and rename
         run: |
-          ls dist/
-          mv dist/* MinecraftServerManager-linux 2>/dev/null || mv dist/main MinecraftServerManager-linux 2>/dev/null || true
+          ls -la dist/
+          cd dist && for f in main*; do mv "$f" ../MinecraftServerManager-linux 2>/dev/null && break; done
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: MinecraftServerManager-linux
-          path: dist/MinecraftServerManager-linux
+          path: MinecraftServerManager-linux
 
   release:
     needs: [build-windows, build-macos, build-linux]
