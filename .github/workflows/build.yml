@@ -23,10 +23,11 @@ jobs:
         run: pip install -r requirements.txt nuitka zstandard
 
       - name: Build
+        run: python -m nuitka --standalone --onefile --output-dir=dist main.py
+
+      - name: Find exe
         run: |
-          python -m nuitka --standalone --onefile --output-dir=dist --disable-console main.py 2>&1 | Out-Null
-          if (Test-Path dist/main.exe) { Copy-Item dist/main.exe MinecraftServerManager-windows.exe }
-          if (Test-Path dist/src) { Copy-Item -Recurse dist/src . }
+          Get-ChildItem dist/*.exe | Select-Object -First 1 | Copy-Item -Destination MinecraftServerManager-windows.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -49,14 +50,10 @@ jobs:
         run: pip install -r requirements.txt nuitka zstandard
 
       - name: Build
-        run: |
-          python -m nuitka --standalone --onefile --output-dir=dist --disable-console main.py 2>/dev/null || true
-          cp -r src . 2>/dev/null || true
-          ls -la dist/
+        run: python -m nuitka --standalone --onefile --output-dir=dist main.py
 
       - name: Rename
-        run: |
-          mv dist/main* MinecraftServerManager-macos 2>/dev/null || true
+        run: mv dist/main* MinecraftServerManager-macos
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -79,14 +76,10 @@ jobs:
         run: pip install -r requirements.txt nuitka zstandard
 
       - name: Build
-        run: |
-          python -m nuitka --standalone --onefile --output-dir=dist --disable-console main.py 2>/dev/null || true
-          cp -r src . 2>/dev/null || true
-          ls -la dist/
+        run: python -m nuitka --standalone --onefile --output-dir=dist main.py
 
       - name: Rename
-        run: |
-          mv dist/main* MinecraftServerManager-linux 2>/dev/null || true
+        run: mv dist/main* MinecraftServerManager-linux
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
