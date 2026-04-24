@@ -82,7 +82,7 @@ class MainWindow(QMainWindow):
         self.install_btn.clicked.connect(self.install_server)
         install_layout.addWidget(self.install_btn)
         
-install_layout.addStretch()
+        install_layout.addStretch()
         layout.addLayout(install_layout)
 
         self.server_list = QListWidget()
