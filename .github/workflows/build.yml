@@ -25,10 +25,14 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          python -m nuitka --standalone --onefile "--include-data-dir=src;src" --output-dir=dist main.py
+          python -m nuitka --standalone --onefile-tree=dist/tree --output-dir=dist main.py
 
-      - name: Rename
-        run: ren dist\main.exe MinecraftServerManager-windows.exe
+      - name: Package
+        run: |
+          cd dist/tree && powershell -Command "Compress-Archive -Path * -DestinationPath ../MinecraftServerManager-windows.zip -Force"
+          cd ..
+          ren tree\main.exe MinecraftServerManager-windows.exe 2>/dev/null || true
+          cp tree/main.exe MinecraftServerManager-windows.exe 2>/dev/null || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -51,16 +55,19 @@ jobs:
         run: pip install -r requirements.txt nuitka
 
       - name: Build
-        run: python -m nuitka --standalone --onefile --include-data-dir=src:src --output-dir=dist main.py
+        run: python -m nuitka --standalone --onefile-tree=dist/tree --output-dir=dist main.py
 
-      - name: Rename
-        run: mv dist/main MinecraftServerManager-macos
+      - name: Package
+        run: |
+          cd dist/tree && zip -r ../MinecraftServerManager-macos.zip * 
+          cd ..
+          cp tree/main MinecraftServerManager-macos
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: MinecraftServerManager-macos
-          path: dist/MinecraftServerManager-macos
+          path: dist/MinecraftServerManager-macos*
 
   build-linux:
     runs-on: ubuntu-latest
@@ -77,16 +84,19 @@ jobs:
         run: pip install -r requirements.txt nuitka
 
       - name: Build
-        run: python -m nuitka --standalone --onefile --include-data-dir=src:src --output-dir=dist main.py
+        run: python -m nuitka --standalone --onefile-tree=dist/tree --output-dir=dist main.py
 
-      - name: Rename
-        run: mv dist/main MinecraftServerManager-linux
+      - name: Package
+        run: |
+          cd dist/tree && tar -czf ../MinecraftServerManager-linux.tar.gz *
+          cd ..
+          cp tree/main MinecraftServerManager-linux
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: MinecraftServerManager-linux
-          path: dist/MinecraftServerManager-linux
+          path: dist/MinecraftServerManager-linux*
 
   release:
     needs: [build-windows, build-macos, build-linux]
