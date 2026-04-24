@@ -1,0 +1,146 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Nuitka
+        run: |
+          python -m pip install --upgrade pip
+          pip install nuitka
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Build
+        run: |
+          python -m nuitka `
+            --standalone `
+            --onefile `
+            --windows-disable-console `
+            --include-data-dir=src=src `
+            --output-dir=dist `
+            main.py
+
+      - name: Rename
+        run: Move-Item dist/main.exe dist/MinecraftServerManager-windows.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MinecraftServerManager-windows
+          path: dist/*.exe
+
+  build-macos:
+    runs-on: macos-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Nuitka
+        run: |
+          python -m pip install --upgrade pip
+          pip install nuitka
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Build
+        run: |
+          python -m nuitka \
+            --standalone \
+            --onefile \
+            --macos-disable-console \
+            --include-data-dir=src=src \
+            --output-dir=dist \
+            main.py
+
+      - name: Rename
+        run: mv dist/main.dist/MinecraftServerManager-macos
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MinecraftServerManager-macos
+          path: dist/MinecraftServerManager-macos
+
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Nuitka
+        run: |
+          python -m pip install --upgrade pip
+          pip install nuitka
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Build
+        run: |
+          python -m nuitka \
+            --standalone \
+            --onefile \
+            --linux-disable-console \
+            --include-data-dir=src=src \
+            --output-dir=dist \
+            main.py
+
+      - name: Rename
+        run: mv dist/main.dist/MinecraftServerManager-linux
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MinecraftServerManager-linux
+          path: dist/MinecraftServerManager-linux
+
+  release:
+    needs: [build-windows, build-macos, build-linux]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/MinecraftServerManager-windows.exe
+            dist/MinecraftServerManager-macos
+            dist/MinecraftServerManager-linux
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
