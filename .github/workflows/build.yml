@@ -20,12 +20,12 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt nuitka
+        run: pip install -r requirements.txt nuitka zstandard
 
       - name: Build
         run: |
-          python -m nuitka --standalone --onefile --output-dir=dist main.py
-          cp -r src dist/
+          echo no | python -m nuitka --standalone --onefile --output-dir=dist main.py
+          cp -r src dist/ 2>/dev/null || true
 
       - name: List and rename
         run: |
@@ -50,12 +50,12 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt nuitka
+        run: pip install -r requirements.txt nuitka zstandard
 
       - name: Build
         run: |
-          python -m nuitka --standalone --onefile --output-dir=dist main.py
-          cp -r src dist/
+          echo no | python -m nuitka --standalone --onefile --output-dir=dist main.py
+          cp -r src dist/ 2>/dev/null || true
 
       - name: List and rename
         run: |
@@ -80,12 +80,12 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt nuitka
+        run: pip install -r requirements.txt nuitka zstandard
 
       - name: Build
         run: |
-          python -m nuitka --standalone --onefile --output-dir=dist main.py
-          cp -r src dist/
+          echo no | python -m nuitka --standalone --onefile --output-dir=dist main.py
+          cp -r src dist/ 2>/dev/null || true
 
       - name: List and rename
         run: |
