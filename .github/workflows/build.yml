@@ -23,7 +23,7 @@ jobs:
         run: pip install -r requirements.txt nuitka
 
       - name: Build
-        run: python -m nuitka --standalone --onefile --windows-disable-console --include-data-dir=src;src --output-dir=dist main.py
+        run: python -m nuitka --standalone --onefile --windows-console=yep --include-data-dir=src;src --output-dir=dist main.py
 
       - name: Rename
         run: ren dist\main.exe MinecraftServerManager-windows.exe
@@ -49,7 +49,7 @@ jobs:
         run: pip install -r requirements.txt nuitka
 
       - name: Build
-        run: python -m nuitka --standalone --onefile --macos-disable-console --include-data-dir=src:src --output-dir=dist main.py
+        run: python -m nuitka --standalone --onefile --macos-console=nope --include-data-dir=src:src --output-dir=dist main.py
 
       - name: Rename
         run: mv dist/main MinecraftServerManager-macos
@@ -75,7 +75,7 @@ jobs:
         run: pip install -r requirements.txt nuitka
 
       - name: Build
-        run: python -m nuitka --standalone --onefile --linux-disable-console --include-data-dir=src:src --output-dir=dist main.py
+        run: python -m nuitka --standalone --onefile --linux-console=nope --include-data-dir=src:src --output-dir=dist main.py
 
       - name: Rename
         run: mv dist/main MinecraftServerManager-linux
